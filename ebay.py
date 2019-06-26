@@ -34,7 +34,7 @@ class Ebay(commands.Cog):
             except Exception as e:
                 print(e)
 
-            sleeptime = 60 * len(db.get_keywords())
+            sleeptime = 60 * len(db.get_keywords() or 1)
             print(f"sleeping for {sleeptime}s")
             await asyncio.sleep(sleeptime)
 
@@ -61,7 +61,7 @@ class Ebay(commands.Cog):
             for item in response.reply.searchResult.item[:10]:
                 timestamp = datetime.utcnow().timestamp()
                 last_timestamp = db.last_scrape_for(query)
-                if last_timestamp is None or timestamp > last_timestamp:
+                if last_timestamp is None or timestamp < last_timestamp:
                     new_items.append(item)
                 else:
                     # print(f"No more new in {query}")
