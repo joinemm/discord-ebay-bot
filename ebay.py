@@ -61,7 +61,7 @@ class Ebay(commands.Cog):
             for item in response.reply.searchResult.item[:10]:
                 timestamp = item.listingInfo.startTime.timestamp()
                 last_timestamp = db.last_scrape_for(query)
-                if last_timestamp is None or timestamp < last_timestamp:
+                if last_timestamp is None or timestamp > last_timestamp:
                     new_items.append(item)
                 else:
                     # print(f"No more new in {query}")
