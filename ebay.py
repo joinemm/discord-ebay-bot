@@ -59,7 +59,7 @@ class Ebay(commands.Cog):
 
             new_items = []
             for item in response.reply.searchResult.item[:10]:
-                timestamp = datetime.utcnow().timestamp()
+                timestamp = item.listingInfo.startTime.timestamp()
                 last_timestamp = db.last_scrape_for(query)
                 if last_timestamp is None or timestamp < last_timestamp:
                     new_items.append(item)
