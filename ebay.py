@@ -5,6 +5,7 @@ from data import db
 from datetime import datetime
 import os
 import asyncio
+import random
 
 
 class Ebay(commands.Cog):
@@ -13,6 +14,10 @@ class Ebay(commands.Cog):
         self.client = client
         self.api = Connection(appid=os.environ.get('EBAY_APPID'), config_file=None)
         self.run = False
+        self.posted_ids = {}
+        self.start_time = datetime.now().timestamp()
+        self.ignore_ts = False
+        self.colors = [discord.Color.red(), discord.Color.blue(), discord.Color.gold(), discord.Color.green()]
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -23,18 +28,18 @@ class Ebay(commands.Cog):
 
     async def loop(self):
         while self.run:
-            keywords = db.get_keywords()
-            try:
-                for query in keywords:
-                    query = query[0]
-                    try:
-                        await self.check_for_new(query)
-                    except Exception as e:
-                        print(f"Problem querying {query}:\n{e}")
-            except Exception as e:
-                print(e)
+            keywords = db.get_keywords() or []
+            #try:
+            for query in keywords:
+                query = query[0]
+                #try:
+                await self.check_for_new(query)
+                #except Exception as e:
+                    #print(f"Problem querying {query}:\n{e}")
+            #except Exception as e:
+                #print(e)
 
-            sleeptime = 60 * len(db.get_keywords() or 1)
+            sleeptime = 60 * len(db.get_keywords() or [1])
             print(f"sleeping for {sleeptime}s")
             await asyncio.sleep(sleeptime)
 
@@ -43,7 +48,6 @@ class Ebay(commands.Cog):
         return response
 
     async def check_for_new(self, query, channel_id=None):
-        new_ts = datetime.now().timestamp()
         response = self.make_request('findItemsByKeywords', {'keywords': query, 'sortOrder': 'StartTimeNewest'})
 
         if int(response.reply.searchResult._count) == 0:
@@ -59,18 +63,18 @@ class Ebay(commands.Cog):
 
             new_items = []
             for item in response.reply.searchResult.item[:10]:
-                timestamp = item.listingInfo.startTime.timestamp()
-                last_timestamp = db.last_scrape_for(query)
-                if last_timestamp is None or timestamp > last_timestamp:
-                    new_items.append(item)
-                else:
-                    # print(f"No more new in {query}")
-                    break
+                if  item.listingInfo.startTime.timestamp() > self.start_time or self.ignore_ts:
+                    if item.globalId not in self.posted_ids.get(str(channel_id), []):
+                        new_items.append(item)
+                    else:
+                        # print(f"No more new in {query}")
+                        break
 
             for item in reversed(new_items):
+                if self.posted_ids.get(str(channel_id)) is None:
+                    self.posted_ids[str(channel_id)] = set()
+                self.posted_ids[str(channel_id)].add(item.globalId)
                 await self.post_new_listing(channel_id, item, is_dm)
-
-        db.update_timestamp(new_ts, query)
 
     async def post_new_listing(self, channel_id, item, is_dm=None):
         if is_dm:
@@ -86,18 +90,21 @@ class Ebay(commands.Cog):
 
     def listing_to_embed(self, item):
         # print(item)
-        content = discord.Embed()
-        price = f"{item.sellingStatus.currentPrice.value} {item.sellingStatus.currentPrice._currencyId}"
+        content = discord.Embed(color=random.choice(self.colors))
+        price = f"**{item.sellingStatus.currentPrice.value}** {item.sellingStatus.currentPrice._currencyId}"
         try:
-            price_shipping = f"{item.shippingInfo.shippingServiceCost.value} " \
-                             f"{item.shippingInfo.shippingServiceCost._currencyId}"
+            price_shipping = f"+ **{item.shippingInfo.shippingServiceCost.value}** " \
+                             f"{item.shippingInfo.shippingServiceCost._currencyId} " \
+                             f"{item.shippingInfo.shipToLocations} shipping" \
+                if float(item.shippingInfo.shippingServiceCost.value) > 0 else ""
         except AttributeError as e:
             # print(e)
             price_shipping = f"{item.shippingInfo.shippingType}"
         content.set_author(name=item.title, url=item.viewItemURL)
-        content.add_field(name="Price", value=f"{price} + {price_shipping} {item.shippingInfo.shipToLocations} shipping")
+        content.add_field(name="Price", value=f"{price} {price_shipping}")
+        content.add_field(name="Listing type", value=f"{item.listingInfo.listingType}")
         content.add_field(name="Location", value=f"{item.globalId} | {item.location}")
-        content.add_field(name="Category", value=item.primaryCategory.categoryName)
+        #content.add_field(name="Category", value=item.primaryCategory.categoryName)
         content.timestamp = item.listingInfo.startTime
         content.set_footer(text=item.itemId)
         content.set_image(url=item.galleryURL)
