@@ -161,6 +161,14 @@ class Ebay(commands.Cog):
             content.add_field(name=item.title, value=f"{price}")
         await ctx.send(embed=content)
 
+    @commands.command(name='list')
+    async def list_follows(self, ctx):
+        data = db.query("SELECT keyword, channel_id FROM keywords")
+        content = discord.Embed(title="Followed keywords", color=discord.Color.red())
+        for row in data:
+            content.description += f"`{row[0]}` >>> <#{row[1]}>\n"
+        await ctx.send(embed=content)
+
 
 def setup(client):
     client.add_cog(Ebay(client))
